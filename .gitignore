@@ -8,10 +8,16 @@ __pycache__/
 node_modules/
 .next/
 
-# Environment files — NEVER commit these
+# ALL env files — never commit
 .env
 .env.local
+**/.env
+**/.env.local
 frontend/.env.local
+backend/.env
+
+# Database
+*.db
 
 # OS
 .DS_Store
