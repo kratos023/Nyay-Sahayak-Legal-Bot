@@ -1,0 +1,24 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Node / Next.js
+node_modules/
+.next/
+
+# ALL env files — never commit
+.env
+.env.local
+**/.env
+**/.env.local
+frontend/.env.local
+backend/.env
+
+# Database
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
