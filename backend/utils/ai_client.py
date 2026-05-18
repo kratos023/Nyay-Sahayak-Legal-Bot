@@ -11,38 +11,20 @@ from typing import Optional
 # ── Gemini ────────────────────────────────────────────────────────────────────
 GEMINI_AVAILABLE = False
 client = None
-_clients = []
-_client_index = 0
 
 try:
     from google import genai
     from google.genai import types as genai_types
 
-    # Support multiple API keys for load balancing: GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3
-    _keys = [
-        os.getenv("GEMINI_API_KEY"),
-        os.getenv("GEMINI_API_KEY_2"),
-        os.getenv("GEMINI_API_KEY_3"),
-    ]
-    _keys = [k for k in _keys if k and k.startswith("AIza")]
-    _clients = [genai.Client(api_key=k) for k in _keys]
-    if _clients:
-        client = _clients[0]
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    if GEMINI_API_KEY and GEMINI_API_KEY.startswith("AIza"):
+        client = genai.Client(api_key=GEMINI_API_KEY)
         GEMINI_AVAILABLE = True
-        print(f"✅ Gemini client ready ({len(_clients)} key(s) loaded)")
+        print("✅ Gemini client ready")
 except Exception as e:
     print(f"⚠️ Gemini unavailable: {e}")
 
-def _get_next_client():
-    """Round-robin across available Gemini clients."""
-    global _client_index
-    if not _clients:
-        return client
-    c = _clients[_client_index % len(_clients)]
-    _client_index += 1
-    return c
-
-GEMINI_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"]
+GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
 
 # ── Bhashini ──────────────────────────────────────────────────────────────────
 INFERENCE_API_KEY = os.getenv("BHASHINI_API_KEY", "")
@@ -306,27 +288,20 @@ def query_legal_ai(question: str, context: str = "", language: str = "en") -> st
 
     full_prompt = f"{system_prompt}\n\n{context}\n{question}" if context else f"{system_prompt}\n\n{question}"
 
-    import time
     for model_name in GEMINI_MODELS:
-        for attempt in range(3):
-            try:
-                response = _get_next_client().models.generate_content(
-                    model=model_name,
-                    contents=full_prompt,
-                    config=genai_types.GenerateContentConfig(temperature=0.7, max_output_tokens=2000),
-                )
-                if response and response.text:
-                    return format_ai_response(response.text)
-                break
-            except Exception as e:
-                err = str(e)
-                if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                    time.sleep(2)  # wait then try next model/key combo
-                    continue
-                if attempt < 2:
-                    time.sleep(2 ** attempt)
-                    continue
-                break
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=full_prompt,
+                config=genai_types.GenerateContentConfig(temperature=0.7, max_output_tokens=2000),
+            )
+            if response and response.text:
+                return format_ai_response(response.text)
+        except Exception as e:
+            err = str(e)
+            if "429" in err or "RESOURCE_EXHAUSTED" in err:
+                return get_emergency_response() if is_emergency else get_quota_response()
+            continue
 
     return get_emergency_response() if is_emergency else get_quota_response()
 
@@ -353,7 +328,7 @@ Important: Respond entirely in {lang_name}. Focus on Indian legal context."""
 
     for model_name in GEMINI_MODELS:
         try:
-            response = _get_next_client().models.generate_content(
+            response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(temperature=0.7, max_output_tokens=2500),
@@ -462,7 +437,7 @@ Format with clear sections and bullet points."""
 
     for model_name in GEMINI_MODELS:
         try:
-            response = _get_next_client().models.generate_content(
+            response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(temperature=0.7, max_output_tokens=2000),

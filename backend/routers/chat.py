@@ -174,11 +174,8 @@ async def stream_message(req: ChatRequest):
                     except Exception as e:
                         err = str(e)
                         if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                            fallback = get_emergency_response() if is_emergency else get_quota_response()
-                            yield f"data: {json.dumps({'type': 'chunk', 'text': fallback})}\n\n"
-                            full_reply = fallback
-                            streamed = True
-                            break
+                            await asyncio.sleep(2)  # brief wait before trying next model
+                            continue  
                         continue
 
                 if not streamed:
