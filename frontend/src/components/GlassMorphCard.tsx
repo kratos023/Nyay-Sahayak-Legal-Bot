@@ -24,7 +24,6 @@ export default function GlassMorphCard({
   return (
     <div
       onClick={onClick}
-      style={style}
       className={clsx(
         // Base glassmorphism styles
         "backdrop-blur-xl bg-white/[0.03] border border-white/[0.08]",
@@ -53,7 +52,8 @@ export default function GlassMorphCard({
       style={{
         background: gradient 
           ? 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)'
-          : undefined
+          : undefined,
+        ...style
       }}
     >
       {children}
