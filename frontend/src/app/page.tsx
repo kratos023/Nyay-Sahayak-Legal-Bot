@@ -122,7 +122,6 @@ export default function Home() {
           inputLang={inputLang}
           outputLang={outputLang}
           enableTTS={enableTTS}
-          simpleMode={simpleMode}
           onInputLangChange={setInputLang}
           onOutputLangChange={setOutputLang}
           onTTSChange={setEnableTTS}
