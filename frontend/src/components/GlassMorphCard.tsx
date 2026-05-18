@@ -9,6 +9,7 @@ interface GlassMorphCardProps {
   glow?: boolean;
   gradient?: boolean;
   onClick?: () => void;
+  style?: React.CSSProperties;
 }
 
 export default function GlassMorphCard({ 
@@ -17,11 +18,13 @@ export default function GlassMorphCard({
   hover = true, 
   glow = false, 
   gradient = false,
-  onClick 
+  onClick,
+  style
 }: GlassMorphCardProps) {
   return (
     <div
       onClick={onClick}
+      style={style}
       className={clsx(
         // Base glassmorphism styles
         "backdrop-blur-xl bg-white/[0.03] border border-white/[0.08]",
