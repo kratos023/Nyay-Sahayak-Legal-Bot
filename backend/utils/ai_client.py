@@ -293,7 +293,7 @@ def query_legal_ai(question: str, context: str = "", language: str = "en") -> st
             response = client.models.generate_content(
                 model=model_name,
                 contents=full_prompt,
-                config=genai_types.GenerateContentConfig(temperature=0.7, max_output_tokens=2000),
+                config=genai_types.GenerateContentConfig(temperature=0.7, max_output_tokens=4096),
             )
             if response and response.text:
                 return format_ai_response(response.text)
@@ -331,7 +331,7 @@ Important: Respond entirely in {lang_name}. Focus on Indian legal context."""
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
-                config=genai_types.GenerateContentConfig(temperature=0.7, max_output_tokens=2500),
+                config=genai_types.GenerateContentConfig(temperature=0.7, max_output_tokens=4096),
             )
             if response and response.text:
                 return format_ai_response(response.text)
@@ -440,7 +440,7 @@ Format with clear sections and bullet points."""
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
-                config=genai_types.GenerateContentConfig(temperature=0.7, max_output_tokens=2000),
+                config=genai_types.GenerateContentConfig(temperature=0.7, max_output_tokens=4096),
             )
             if response and response.text:
                 return response.text

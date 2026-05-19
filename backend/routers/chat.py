@@ -154,28 +154,77 @@ async def stream_message(req: ChatRequest):
         else:
             try:
                 from google.genai import types as genai_types
+                import concurrent.futures
+
                 streamed = False
+                loop = asyncio.get_event_loop()
+
                 for model_name in GEMINI_MODELS:
                     try:
-                        response_stream = gemini_client.models.generate_content_stream(
-                            model=model_name,
-                            contents=full_prompt,
-                            config=genai_types.GenerateContentConfig(
-                                temperature=0.7, max_output_tokens=2000
-                            ),
-                        )
-                        for chunk in response_stream:
-                            if chunk.text:
-                                full_reply += chunk.text
-                                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk.text})}\n\n"
-                                await asyncio.sleep(0)  # yield control to event loop
+                        # Run the synchronous stream iterator in a thread pool so it
+                        # doesn't block the async event loop between chunks.
+                        chunk_queue: asyncio.Queue = asyncio.Queue()
+                        stream_error: list = []
+
+                        def _stream_to_queue():
+                            """Blocking: runs in thread pool, pushes chunks into queue."""
+                            try:
+                                response_stream = gemini_client.models.generate_content_stream(
+                                    model=model_name,
+                                    contents=full_prompt,
+                                    config=genai_types.GenerateContentConfig(
+                                        temperature=0.7, max_output_tokens=4096
+                                    ),
+                                )
+                                for chunk in response_stream:
+                                    if chunk.text:
+                                        loop.call_soon_threadsafe(chunk_queue.put_nowait, chunk.text)
+                            except Exception as exc:
+                                stream_error.append(exc)
+                            finally:
+                                loop.call_soon_threadsafe(chunk_queue.put_nowait, None)  # sentinel
+
+                        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                        future = loop.run_in_executor(executor, _stream_to_queue)
+
+                        last_ping = asyncio.get_event_loop().time()
+                        while True:
+                            try:
+                                # Wait up to 20 s for the next chunk; send a keep-alive
+                                # comment every 15 s so Railway doesn't kill the connection.
+                                text = await asyncio.wait_for(chunk_queue.get(), timeout=20.0)
+                            except asyncio.TimeoutError:
+                                yield ": keep-alive\n\n"  # SSE comment — invisible to client
+                                continue
+
+                            if text is None:  # sentinel → stream finished
+                                break
+
+                            # Send keep-alive ping if no chunk for >15 s
+                            now = asyncio.get_event_loop().time()
+                            if now - last_ping > 15:
+                                yield ": keep-alive\n\n"
+                                last_ping = now
+
+                            full_reply += text
+                            yield f"data: {json.dumps({'type': 'chunk', 'text': text})}\n\n"
+
+                        await future  # re-raise thread exceptions if any
+
+                        if stream_error:
+                            raise stream_error[0]
+
                         streamed = True
                         break
+
                     except Exception as e:
                         err = str(e)
                         if "429" in err or "RESOURCE_EXHAUSTED" in err:
-                            await asyncio.sleep(2)  # brief wait before trying next model
-                            continue  
+                            fallback = get_emergency_response() if is_emergency else get_quota_response()
+                            yield f"data: {json.dumps({'type': 'chunk', 'text': fallback})}\n\n"
+                            full_reply = fallback
+                            streamed = True
+                            break
                         continue
 
                 if not streamed:
