@@ -140,24 +140,50 @@ def get_helplines_for_topics(topics: list) -> list:
     return (lines or HELPLINE_MAP["legal_aid"])[:4]
 
 
-def extract_cases_from_response(ai_response: str) -> list:
+def extract_cases_from_response(ai_response: str, user_query: str = "", client=None, models=None) -> list:
     """
-    Smart extraction: scan the AI reply for section numbers and legal keywords,
-    return cases specifically relevant to what was actually discussed.
+    AI-generated landmark cases specific to the actual question asked.
+    Falls back to keyword matching if AI call fails.
     """
+    import json
+
+    # Try AI-generated cases first
+    if client and models:
+        prompt = f"""You are an Indian legal expert.
+
+User asked: "{user_query[:200]}"
+Legal response discussed: "{ai_response[:400]}"
+
+Give exactly 3 real Indian Supreme Court or High Court landmark cases DIRECTLY relevant to this specific situation.
+Each must be genuinely relevant to what the user asked — not generic filler cases.
+Return ONLY a JSON array of 3 strings. No markdown. No explanation.
+Format: ["Case Name v. Other Party (Year) — One line relevance", "...", "..."]"""
+
+        for model_name in (models or []):
+            try:
+                from google.genai import types as genai_types
+                response = client.models.generate_content(
+                    model=model_name, contents=prompt,
+                    config=genai_types.GenerateContentConfig(temperature=0.3, max_output_tokens=300)
+                )
+                if response and response.text:
+                    text = re.sub(r'```json|```', '', response.text).strip()
+                    cases = json.loads(text)
+                    if isinstance(cases, list) and len(cases) >= 2:
+                        return [c for c in cases if isinstance(c, str)][:3]
+            except Exception:
+                continue
+
+    # Fallback: keyword matching from hardcoded SECTION_CASES
     text_lower = ai_response.lower()
     matched_cases = []
     seen = set()
-
-    # Check each key in SECTION_CASES against the AI response
     for key, cases in SECTION_CASES.items():
         if key in text_lower:
             for case in cases:
                 if case not in seen:
                     seen.add(case)
                     matched_cases.append(case)
-
-    # Also pull section numbers like "Section 498A", "Section 307", "Article 21"
     section_nums = re.findall(
         r'(?:section|sec\.?|ipc|bns|crpc|article)\s*(\d+[a-zA-Z]*)',
         text_lower
@@ -168,8 +194,6 @@ def extract_cases_from_response(ai_response: str) -> list:
             for case in SECTION_CASES[key]:
                 if case not in seen:
                     seen.add(case); matched_cases.append(case)
-
-    # Deduplicate and return top 3
     return matched_cases[:3]
 
 
@@ -216,8 +240,8 @@ def build_suggestions(user_query: str, ai_response: str, client=None, models=Non
     topics = list(set(detect_topics(user_query) + detect_topics(ai_response[:500])))
     helplines = get_helplines_for_topics(topics)
 
-    # Smart case extraction from actual AI response content
-    cases = extract_cases_from_response(ai_response)
+    # AI-generated cases specific to this exact query
+    cases = extract_cases_from_response(ai_response, user_query, client, models or [])
 
     followups = generate_followup_questions(
         user_query, ai_response, client, models or []
