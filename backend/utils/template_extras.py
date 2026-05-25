@@ -44,6 +44,7 @@ def _font(lang='English'):
 
 def _styles(lang='English'):
     f = _font(lang)
+    hb = f + "-Bold" if f == "Helvetica" else f
     s = getSampleStyleSheet()
     title  = ParagraphStyle("T",  parent=s["Heading1"], fontSize=15, alignment=TA_CENTER,
                              textColor=colors.HexColor("#1a3a5c"), spaceAfter=4, fontName=hb)
